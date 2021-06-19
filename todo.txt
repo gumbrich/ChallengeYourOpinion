@@ -1,0 +1,7 @@
+To dos: LDA analysis
+
+# (1) introduce time stamp in csv file
+# (2) analyze daily 'hot topics' on different media outlets
+      - plot those as function of time
+      - compare them and find matches
+# (3) contrast headlines (for few categories, e.g. election in a country) among different outlets
