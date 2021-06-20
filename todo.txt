@@ -1,6 +1,6 @@
 To dos: LDA analysis
 
-# (1) introduce time stamp in csv file
+# (1) analyse commonly used words (contrast e.g. TAZ and NZZ)
 # (2) analyze daily 'hot topics' on different media outlets
       - plot those as function of time
       - compare them and find matches
