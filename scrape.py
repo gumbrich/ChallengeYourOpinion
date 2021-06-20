@@ -12,11 +12,14 @@
 # 1) Spiegel
 # 2) NZZ
 # 3) taz
-# 4) Sueddeutsche
-# 5) FAZ
-# 6) BILD
-# 7) Weltwoche
-# 8) Der Standard
+# 4) Focus
+
+# next, todo:
+# 5) Sueddeutsche
+# 6) FAZ
+# 7) BILD
+# 8) Weltwoche
+# 9) Der Standard
 
 
 # LIBRARIES
@@ -27,8 +30,10 @@ import schedule
 from nltk.tokenize import RegexpTokenizer
 from bs4 import BeautifulSoup
 from pathlib import Path
+from datetime import date
 
 tokenizer = RegexpTokenizer('\w+')
+today = date.today()
 
 # Import German stopwords
 stopwords_file = open("stopwords.txt", "r")
@@ -92,7 +97,7 @@ def scrape_spiegel():
 		spiegel_headline = news_spiegel[i].get('aria-label')
 		
 		if spiegel_headline and spiegel_headline not in spiegel_df.values:
-			spiegel_df = spiegel_df.append({'Teaser': spiegel_headline}, ignore_index=True)
+			spiegel_df = spiegel_df.append({'Teaser': spiegel_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
 
 	for spiegel_headline_db in spiegel_df['Teaser']:
 		tokens = tokenizer.tokenize(spiegel_headline_db)
@@ -127,7 +132,7 @@ def scrape_taz():
 		taz_headline = news_taz[i].get_text()
 		
 		if taz_headline and taz_headline not in taz_df.values:
-			taz_df = taz_df.append({'Teaser': taz_headline}, ignore_index=True)
+			taz_df = taz_df.append({'Teaser': taz_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
 
 	for taz_headline_db in taz_df['Teaser']:
 		tokens = tokenizer.tokenize(taz_headline_db)
@@ -162,7 +167,7 @@ def scrape_focus():
 		focus1_headline = news_focus1[i].get('title')
 		
 		if focus1_headline and focus1_headline not in focus1_df.values:
-			focus1_df = focus1_df.append({'Teaser': focus1_headline}, ignore_index=True)
+			focus1_df = focus1_df.append({'Teaser': focus1_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
 
 	for focus1_headline_db in focus1_df['Teaser']:
 		tokens = tokenizer.tokenize(focus1_headline_db)
