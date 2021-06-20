@@ -61,7 +61,7 @@ def scrape_nzz():
 		nzz_headline = news_nzz[i].get_text()
 		
 		if nzz_headline and nzz_headline not in nzz_df.values:
-			nzz_df = nzz_df.append({'Teaser': nzz_headline}, ignore_index=True)
+			nzz_df = nzz_df.append({'Teaser': nzz_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
 
 	for nzz_headline_db in nzz_df['Teaser']:
 		tokens = tokenizer.tokenize(nzz_headline_db)
