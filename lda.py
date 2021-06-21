@@ -89,16 +89,16 @@ print(f'Einträge aus Spiegel: {len(texts_spiegel)}')
 ########################################################################
 # LDA analysis
 
-n_topics = 4
+n_topics = 3
 
 ########################################################################
 dictionary_nzz = corpora.Dictionary(texts_nzz)
 corpus_nzz = [dictionary_nzz.doc2bow(text) for text in texts_nzz]
-ldamodel_nzz = gensim.models.ldamodel.LdaModel(corpus_nzz, num_topics=n_topics, id2word = dictionary_nzz, passes=300, minimum_probability=0.1, alpha='asymmetric') # eta = 0.3
+ldamodel_nzz = gensim.models.ldamodel.LdaModel(corpus_nzz, num_topics=n_topics, id2word = dictionary_nzz, passes=100, minimum_probability=0.01, alpha='asymmetric', eta=0.01)
 ########################################################################
 dictionary_spiegel = corpora.Dictionary(texts_spiegel)
 corpus_spiegel = [dictionary_spiegel.doc2bow(text) for text in texts_spiegel]
-ldamodel_spiegel = gensim.models.ldamodel.LdaModel(corpus_spiegel, num_topics=n_topics, id2word = dictionary_spiegel, passes=300, minimum_probability=0.1, alpha='asymmetric')
+ldamodel_spiegel = gensim.models.ldamodel.LdaModel(corpus_spiegel, num_topics=n_topics, id2word = dictionary_spiegel, passes=100, minimum_probability=0, alpha='asymmetric')
 
 mdiff, annotation = ldamodel_nzz.diff(ldamodel_spiegel, distance='jaccard', num_words=50) # try Hellinger distance
 
@@ -148,6 +148,9 @@ print(topic_1_spiegel[0:3])
 ########################################################################
 # Plot a chart diagram of major topics in news outlets
 
+# Assign top n keywords to each topic
+top_n = 2
+
 ############################
 # (1) NZZ
 dominant_topics_nzz, topic_percentages_nzz = topics_per_document(model=ldamodel_nzz, corpus=corpus_nzz, end=-1)
@@ -159,12 +162,12 @@ df_dominant_topic_in_each_headline_nzz = dominant_topic_in_each_headline_nzz.to_
 topic_weightage_by_headline_nzz = pd.DataFrame([dict(t) for t in topic_percentages_nzz])
 df_topic_weightage_by_headline_nzz = topic_weightage_by_headline_nzz.sum().to_frame(name='count').reset_index()
 
-# Top 3 keywords for each topic
-topic_top3words_nzz = [(i, topic) for i, topics in ldamodel_nzz.show_topics(formatted=False) 
-                                 for j, (topic, wt) in enumerate(topics) if j < 3]
-df_top3words_stacked_nzz = pd.DataFrame(topic_top3words_nzz, columns=['topic_id', 'words'])
-df_top3words_nzz = df_top3words_stacked_nzz.groupby('topic_id').agg(', \n'.join)
-df_top3words_nzz.reset_index(level=0,inplace=True)
+# Top n keywords for each topic
+topic_top_n_words_nzz = [(i, topic) for i, topics in ldamodel_nzz.show_topics(formatted=False) 
+                                 for j, (topic, wt) in enumerate(topics) if j < top_n]
+df_top_n_words_stacked_nzz = pd.DataFrame(topic_top_n_words_nzz, columns=['topic_id', 'words'])
+df_top_n_words_nzz = df_top_n_words_stacked_nzz.groupby('topic_id').agg(', \n'.join)
+df_top_n_words_nzz.reset_index(level=0,inplace=True)
 
 ############################
 # (2) Spiegel
@@ -177,12 +180,12 @@ df_dominant_topic_in_each_headline_spiegel = dominant_topic_in_each_headline_spi
 topic_weightage_by_headline_spiegel = pd.DataFrame([dict(t) for t in topic_percentages_spiegel])
 df_topic_weightage_by_headline_spiegel = topic_weightage_by_headline_spiegel.sum().to_frame(name='count').reset_index()
 
-# Top 3 keywords for each topic
-topic_top3words_spiegel = [(i, topic) for i, topics in ldamodel_spiegel.show_topics(formatted=False) 
-                                 for j, (topic, wt) in enumerate(topics) if j < 3]
-df_top3words_stacked_spiegel = pd.DataFrame(topic_top3words_spiegel, columns=['topic_id', 'words'])
-df_top3words_spiegel = df_top3words_stacked_spiegel.groupby('topic_id').agg(', \n'.join)
-df_top3words_spiegel.reset_index(level=0,inplace=True)
+# Top n keywords for each topic
+topic_top_n_words_spiegel = [(i, topic) for i, topics in ldamodel_spiegel.show_topics(formatted=False) 
+                                 for j, (topic, wt) in enumerate(topics) if j < top_n]
+df_top_n_words_stacked_spiegel = pd.DataFrame(topic_top_n_words_spiegel, columns=['topic_id', 'words'])
+df_top_n_words_spiegel = df_top_n_words_stacked_spiegel.groupby('topic_id').agg(', \n'.join)
+df_top_n_words_spiegel.reset_index(level=0,inplace=True)
 
 ############################
 # Plot
@@ -191,19 +194,19 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), dpi=300, sharey=True)
 # Topic Distribution by Dominant Topics
 ax1.bar(x='Dominant_Topic', height='count', data=df_dominant_topic_in_each_headline_nzz, width=.5, color='firebrick')
 ax1.set_xticks(range(df_dominant_topic_in_each_headline_nzz.Dominant_Topic.unique().__len__()))
-tick_formatter = FuncFormatter(lambda x, pos: 'Topic ' + str(x+1)+ '\n' + df_top3words_nzz.loc[df_top3words_nzz.topic_id==x, 'words'].values[0])
+tick_formatter = FuncFormatter(lambda x, pos: 'Topic ' + str(x+1)+ '\n' + df_top_n_words_nzz.loc[df_top_n_words_nzz.topic_id==x, 'words'].values[0])
 ax1.xaxis.set_major_formatter(tick_formatter)
 ax1.set_title('# of headlines by dominant topic: NZZ', fontdict=dict(size=10))
-ax1.set_ylabel('Number of Documents')
-ax1.set_ylim(0, 200)
+ax1.set_ylabel('Number of Headlines')
+ax1.set_ylim(0, 500)
 
 ax2.bar(x='Dominant_Topic', height='count', data=df_dominant_topic_in_each_headline_spiegel, width=.5, color='steelblue')
 ax2.set_xticks(range(df_dominant_topic_in_each_headline_spiegel.Dominant_Topic.unique().__len__()))
-tick_formatter = FuncFormatter(lambda x, pos: 'Topic ' + str(x+1)+ '\n' + df_top3words_spiegel.loc[df_top3words_spiegel.topic_id==x, 'words'].values[0])
+tick_formatter = FuncFormatter(lambda x, pos: 'Topic ' + str(x+1)+ '\n' + df_top_n_words_spiegel.loc[df_top_n_words_spiegel.topic_id==x, 'words'].values[0])
 ax2.xaxis.set_major_formatter(tick_formatter)
 ax2.set_title('# of headlines by dominant topic: Spiegel', fontdict=dict(size=10))
-ax2.set_ylabel('Number of Documents')
-ax2.set_ylim(0, 200)
+ax2.set_ylabel('Number of Headlines')
+ax2.set_ylim(0, 500)
 
 plt.tight_layout()
-plt.savefig('topics.png', dpi=300)
+plt.savefig('headlines_by_topic.png', dpi=300)
