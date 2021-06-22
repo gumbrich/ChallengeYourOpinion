@@ -111,39 +111,6 @@ def distr_taz():
 	taz_distr = nltk.FreqDist(taz_words)
 
 ########################################################################
-		
-########################################################################
-# Case study: Focus
-def scrape_focus():
-	
-	focus1 = requests.get('http://www.focus.de')
-	cover_focus1 = focus1.content
-	soup_focus1 = BeautifulSoup(cover_focus1, 'html.parser')
-	news_focus1 = soup_focus1.find_all('a')
-	len_focus1 = len(news_focus1)
-	focus1_df = pd.DataFrame(columns=['Teaser'])
-	focus1_file = Path("focus_scrape.csv")
-	focus1_new_record = True
-	if focus1_file.exists():
-		focus1_df = pd.read_csv('focus_scrape.csv')
-		focus1_new_record = False
-	focus1_words = []
-
-	for i in range(len_focus1):
-		focus1_headline = news_focus1[i].get('title')
-		
-		if focus1_headline and focus1_headline not in focus1_df.values:
-			focus1_df = focus1_df.append({'Teaser': focus1_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
-
-	for focus1_headline_db in focus1_df['Teaser']:
-		tokens = tokenizer.tokenize(focus1_headline_db)
-		for word in tokens:
-			if word.lower() not in stopwords:
-				focus1_words.append(word)
-
-	focus1_distr = nltk.FreqDist(focus1_words)
-
-########################################################################
 
 nzz_distr = distr_nzz()
 spiegel_distr = distr_spiegel()
