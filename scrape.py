@@ -185,6 +185,8 @@ def scrape_web():
 	scrape_nzz()
 	scrape_spiegel()
 	scrape_taz()
+	
+scrape_web()
 
 schedule.every(30).minutes.do(scrape_web)
 
