@@ -1,6 +1,7 @@
 To dos: LDA analysis
 
-# (1) analyse commonly used words (contrast e.g. TAZ and NZZ)
+# (1) scrape bodies of articles, or find more data on the outlet websites, respectively
+# (1b) apply K-Means to larger data set
 # (2) analyze daily 'hot topics' on different media outlets
       - plot those as function of time
       - compare them and find matches
