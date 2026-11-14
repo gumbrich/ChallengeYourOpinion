@@ -1,71 +1,39 @@
-# project: Challenge Your Opinion
-# K-means clustering algorithm, to group news articles & visualize categories
-# date: June 23, 2021
+"""Cluster complete German headlines (not individual flattened tokens)."""
+from pathlib import Path
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+ROOT = Path(__file__).resolve().parent
 
-from sklearn.feature_extraction import text
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import KMeans
-from nltk.tokenize import RegexpTokenizer
-from nltk.stem.porter import PorterStemmer
 
-# ~ tokenizer = RegexpTokenizer(r'[a-zA-Z\']+')
-tokenizer = RegexpTokenizer('\w+')
-p_stemmer = PorterStemmer()
+def main():
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.cluster import KMeans
 
-# Import German stopwords
-stopwords_file = open("stopwords.txt", "r")
-stopwords = stopwords_file.read().split('\n')
-stopwords_file.close()
+    stopwords = (ROOT / 'stopwords.txt').read_text(encoding='utf-8').splitlines()
+    frames = [pd.read_csv(ROOT / f'{source}_scrape.csv').assign(source=source) for source in ('nzz', 'spiegel', 'taz')]
+    headlines = pd.concat(frames, ignore_index=True)['Teaser'].dropna().str.strip().drop_duplicates()
+    headlines = headlines[headlines.str.len() > 0]
+    if len(headlines) < 2:
+        raise ValueError('At least two headlines are required.')
+    vectorizer = TfidfVectorizer(stop_words=stopwords, max_features=5000)
+    matrix = vectorizer.fit_transform(headlines)
+    word_features = vectorizer.get_feature_names_out()
+    maximum = min(15, len(headlines))
+    inertia = []
+    for count in range(1, maximum + 1):
+        model = KMeans(n_clusters=count, n_init=10, max_iter=500, random_state=0).fit(matrix)
+        inertia.append(model.inertia_)
+    plt.plot(range(1, maximum + 1), inertia)
+    plt.title('Elbow method · complete headlines')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Within-cluster sum of squares')
+    plt.savefig(ROOT / f'cluster_elbow_c{maximum}.png')
+    plt.close()
+    model = KMeans(n_clusters=min(4, len(headlines)), n_init=40, random_state=0).fit(matrix)
+    for number, centroid in enumerate(model.cluster_centers_.argsort()[:, -1:-6:-1]):
+        print(f'{number}: ' + ', '.join(word_features[index] for index in centroid))
 
-########################################################################
-nzz_df = pd.read_csv('nzz_scrape.csv')
-spiegel_df = pd.read_csv('spiegel_scrape.csv')
-taz_df = pd.read_csv('spiegel_scrape.csv')
 
-spiegel_headlines = spiegel_df['Teaser'].values
-
-texts_nzz = list()
-texts_spiegel = list()
-
-for spiegel_headline_db in spiegel_df['Teaser']:
-	tokens_spiegel = tokenizer.tokenize(spiegel_headline_db)
-	stopped_tokens_spiegel = [i for i in tokens_spiegel if not i.lower() in stopwords]
-	text_spiegel = [p_stemmer.stem(t) for t in stopped_tokens_spiegel]
-	texts_spiegel.append(text_spiegel)
-
-flat_spiegel = [item for sublist in texts_spiegel for item in sublist]
-
-vectorizer = TfidfVectorizer(max_features=20)
-X = vectorizer.fit_transform(flat_spiegel)
-word_features = vectorizer.get_feature_names()
-print(len(word_features))
-
-# within-cluster sum of squares
-WCSS = []
-
-n_clusters_max = 15
-
-for i in range(1,n_clusters_max+1):
-	kmeans = KMeans(n_clusters = i, init='k-means++', max_iter=500, n_init=10, random_state=0)
-	kmeans.fit(X)
-	WCSS.append(kmeans.inertia_)
-	print(i)
-
-plt.plot(range(1,n_clusters_max+1), WCSS)
-plt.title('Elbow method')
-plt.xlabel('# of clusters')
-plt.ylabel('WCSS')
-plt.savefig('cluster_elbow_c%i.png' % (n_clusters_max))
-
-# clustering
-kmeans = KMeans(n_clusters = 4, n_init = 40)
-kmeans.fit(X)
-
-common_words = kmeans.cluster_centers_.argsort()[:,-1:-5:-1]
-for num, centroid in enumerate(common_words):
-	print(str(num) + ' : ' + ', '.join(word_features[word] for word in centroid))
+if __name__ == '__main__':
+    main()
