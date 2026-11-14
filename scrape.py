@@ -1,192 +1,93 @@
-# project: "Challenge your opinion"
-# date: June 18, 2021
-# author: Johannes Knörzer
+"""Headline collection for the original research corpus.
 
-# Idea for News Aggregator Project
-# 1) Scrape headlines and teaser texts from major newspapers (AT, CH, DE)
-# 2) Analyze usage of words for different sources
-# 3) Collect similar news from different sources
-# 4) Show diversity of perspectives on similar topics
-
-# Some ideas for newspapers to include:
-# 1) Spiegel
-# 2) NZZ
-# 3) taz
-# 4) Focus
-
-# next, todo:
-# 5) Sueddeutsche
-# 6) FAZ
-# 7) BILD
-# 8) Weltwoche
-# 9) Der Standard
-
-
-# LIBRARIES
-import pandas as pd
-import requests
-import nltk
-import schedule
-from nltk.tokenize import RegexpTokenizer
-from bs4 import BeautifulSoup
-from pathlib import Path
+Selectors are historical and may need maintenance. Run explicitly with --once or
+--interval; importing this module never starts network access or a scheduler.
+"""
+import argparse
+import csv
+import logging
+import time
 from datetime import date
+from pathlib import Path
 
-tokenizer = RegexpTokenizer('\w+')
-today = date.today()
-
-# Import German stopwords
-stopwords_file = open("stopwords.txt", "r")
-stopwords = stopwords_file.read().split('\n')
-stopwords_file.close()
-
-########################################################################
-# Case study: NZZ
-def scrape_nzz():
-
-	nzz = requests.get('http://www.nzz.ch')
-	cover_nzz = nzz.content
-	soup_nzz = BeautifulSoup(cover_nzz, 'html.parser')
-	news_nzz = soup_nzz.find_all('span', class_='teaser__title-name teaser__title-name--waiting')
-	len_nzz = len(news_nzz)
-	nzz_df = pd.DataFrame(columns=['Teaser'])
-	nzz_file = Path("nzz_scrape.csv")
-	nzz_new_record = True
-	if nzz_file.exists():
-		nzz_df = pd.read_csv('nzz_scrape.csv')
-		nzz_new_record = False
-	nzz_words = []
-
-	for i in range(len_nzz):
-		nzz_headline = news_nzz[i].get_text()
-		
-		if nzz_headline and nzz_headline not in nzz_df.values:
-			nzz_df = nzz_df.append({'Teaser': nzz_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
-
-	for nzz_headline_db in nzz_df['Teaser']:
-		tokens = tokenizer.tokenize(nzz_headline_db)
-		for word in tokens:
-			if word.lower() not in stopwords:
-				nzz_words.append(word)
-
-	nzz_distr = nltk.FreqDist(nzz_words)
-	print(nzz_distr.most_common(25))
-
-	nzz_df.to_csv('nzz_scrape.csv', index=False)
-########################################################################
+ROOT = Path(__file__).resolve().parent
+SOURCES = {
+    'nzz': ('https://www.nzz.ch', 'span.teaser__title-name', None),
+    'spiegel': ('https://www.spiegel.de', 'article[aria-label]', 'aria-label'),
+    'taz': ('https://taz.de', 'h3', None),
+    'focus': ('https://www.focus.de', 'a[title]', 'title'),
+}
 
 
-########################################################################
-# Case study: Spiegel
-def scrape_spiegel():
-	
-	spiegel = requests.get('http://www.spiegel.de')
-	cover_spiegel = spiegel.content
-	soup_spiegel = BeautifulSoup(cover_spiegel, 'html.parser')
-	news_spiegel = soup_spiegel.find_all('article')
-	len_spiegel = len(news_spiegel)
-	spiegel_df = pd.DataFrame(columns=['Teaser'])
-	spiegel_file = Path("spiegel_scrape.csv")
-	spiegel_new_record = True
-	if spiegel_file.exists():
-		spiegel_df = pd.read_csv('spiegel_scrape.csv')
-		spiegel_new_record = False
-	spiegel_words = []
+def append_headlines(path, headlines, captured_at=None):
+    """Normalize and deduplicate without changing historic dates or losing rows."""
+    rows = []
+    if path.exists():
+        with path.open(encoding='utf-8', newline='') as handle:
+            rows = list(csv.DictReader(handle))
+    known = {' '.join((row.get('Teaser') or '').split()) for row in rows}
+    added = 0
+    for headline in headlines:
+        headline = ' '.join((headline or '').split())
+        if headline and headline not in known:
+            rows.append({'Teaser': headline, 'Date': captured_at or date.today().isoformat()})
+            known.add(headline)
+            added += 1
+    # Atomic replacement keeps an interrupted collection from truncating the corpus.
+    temporary = path.with_suffix('.csv.tmp')
+    with temporary.open('w', encoding='utf-8', newline='') as handle:
+        writer = csv.DictWriter(handle, fieldnames=['Teaser', 'Date'])
+        writer.writeheader()
+        writer.writerows({'Teaser': row.get('Teaser', ''), 'Date': row.get('Date', '')} for row in rows)
+    temporary.replace(path)
+    return added
 
-	for i in range(len_spiegel):
-		spiegel_headline = news_spiegel[i].get('aria-label')
-		
-		if spiegel_headline and spiegel_headline not in spiegel_df.values:
-			spiegel_df = spiegel_df.append({'Teaser': spiegel_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
 
-	for spiegel_headline_db in spiegel_df['Teaser']:
-		tokens = tokenizer.tokenize(spiegel_headline_db)
-		for word in tokens:
-			if word.lower() not in stopwords:
-				spiegel_words.append(word)
+def scrape_source(source, output_dir=ROOT):
+    import requests
+    from bs4 import BeautifulSoup
+    url, selector, attribute = SOURCES[source]
+    response = requests.get(url, timeout=20, headers={'User-Agent': 'ChallengeYourOpinion-Research/1.0'})
+    response.raise_for_status()
+    elements = BeautifulSoup(response.content, 'html.parser').select(selector)
+    if not elements:
+        logging.warning('%s: no matches; inspect the selector. Existing data was not changed.', source)
+        return 0
+    headlines = [element.get(attribute) if attribute else element.get_text(' ', strip=True) for element in elements]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return append_headlines(output_dir / f'{source}_scrape.csv', headlines)
 
-	spiegel_distr = nltk.FreqDist(spiegel_words)
-	print(spiegel_distr.most_common(25))
 
-	spiegel_df.to_csv('spiegel_scrape.csv', index=False)
-########################################################################
+def scrape_nzz(): return scrape_source('nzz')
+def scrape_spiegel(): return scrape_source('spiegel')
+def scrape_taz(): return scrape_source('taz')
+def scrape_focus(): return scrape_source('focus')
 
-########################################################################
-# Case study: TAZ
-def scrape_taz():
-	
-	taz = requests.get('http://www.taz.de')
-	cover_taz = taz.content
-	soup_taz = BeautifulSoup(cover_taz, 'html.parser')
-	news_taz = soup_taz.find_all('h3')
-	len_taz = len(news_taz)
-	taz_df = pd.DataFrame(columns=['Teaser'])
-	taz_file = Path("taz_scrape.csv")
-	taz_new_record = True
-	if taz_file.exists():
-		taz_df = pd.read_csv('taz_scrape.csv')
-		taz_new_record = False
-	taz_words = []
 
-	for i in range(len_taz):
-		taz_headline = news_taz[i].get_text()
-		
-		if taz_headline and taz_headline not in taz_df.values:
-			taz_df = taz_df.append({'Teaser': taz_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
+def scrape_web(sources=('nzz', 'spiegel', 'taz')):
+    for source in sources:
+        try:
+            logging.info('%s: %s new headlines', source, scrape_source(source))
+        except Exception:
+            logging.exception('%s: collection failed; continuing with other sources', source)
 
-	for taz_headline_db in taz_df['Teaser']:
-		tokens = tokenizer.tokenize(taz_headline_db)
-		for word in tokens:
-			if word.lower() not in stopwords:
-				taz_words.append(word)
 
-	taz_distr = nltk.FreqDist(taz_words)
-	print(taz_distr.most_common(25))
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--once', action='store_true')
+    mode.add_argument('--interval', type=int, help='Poll every N seconds (minimum 60).')
+    parser.add_argument('--sources', nargs='+', choices=SOURCES, default=['nzz', 'spiegel', 'taz'])
+    args = parser.parse_args()
+    if args.interval is not None and args.interval < 60:
+        parser.error('--interval must be at least 60 seconds')
+    logging.basicConfig(level=logging.INFO)
+    while True:
+        scrape_web(args.sources)
+        if args.once:
+            return
+        time.sleep(args.interval)
 
-	taz_df.to_csv('taz_scrape.csv', index=False)
-########################################################################
-		
-########################################################################
-# Case study: Focus
-def scrape_focus():
-	
-	focus1 = requests.get('http://www.focus.de')
-	cover_focus1 = focus1.content
-	soup_focus1 = BeautifulSoup(cover_focus1, 'html.parser')
-	news_focus1 = soup_focus1.find_all('a')
-	len_focus1 = len(news_focus1)
-	focus1_df = pd.DataFrame(columns=['Teaser'])
-	focus1_file = Path("focus_scrape.csv")
-	focus1_new_record = True
-	if focus1_file.exists():
-		focus1_df = pd.read_csv('focus_scrape.csv')
-		focus1_new_record = False
-	focus1_words = []
 
-	for i in range(len_focus1):
-		focus1_headline = news_focus1[i].get('title')
-		
-		if focus1_headline and focus1_headline not in focus1_df.values:
-			focus1_df = focus1_df.append({'Teaser': focus1_headline, 'Date': today.strftime("%Y-%m-%d")}, ignore_index=True)
-
-	for focus1_headline_db in focus1_df['Teaser']:
-		tokens = tokenizer.tokenize(focus1_headline_db)
-		for word in tokens:
-			if word.lower() not in stopwords:
-				focus1_words.append(word)
-
-	focus1_distr = nltk.FreqDist(focus1_words)
-	print(focus1_distr.most_common(25))
-
-	focus1_df.to_csv('focus_scrape.csv', index=False)
-########################################################################
-
-def scrape_web():
-	scrape_nzz()
-	scrape_spiegel()
-	scrape_taz()
-	
-schedule.every(30).minutes.do(scrape_web)
-
-while True:
-	schedule.run_pending()
+if __name__ == '__main__':
+    main()

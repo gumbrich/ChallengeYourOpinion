@@ -9,13 +9,13 @@ import gensim
 import matplotlib.pyplot as plt
 import numpy as np
 from nltk.tokenize import RegexpTokenizer
-from nltk.stem.porter import PorterStemmer
+from nltk.stem.snowball import GermanStemmer
 from gensim import corpora, models
 from gensim.models import LdaMulticore
 from matplotlib.ticker import FuncFormatter
 
-tokenizer = RegexpTokenizer('\w+')
-p_stemmer = PorterStemmer()
+tokenizer = RegexpTokenizer(r'\w+')
+p_stemmer = GermanStemmer()
 
 # Import German stopwords
 stopwords_file = open("stopwords.txt", "r")
@@ -24,7 +24,7 @@ stopwords_file.close()
 
 ########################################################################
 # Categorizing Sentences
-def topics_per_document(model, corpus, start=0, end=1):
+def topics_per_document(model, corpus, start=0, end=None):
     corpus_sel = corpus[start:end]
     dominant_topics = []
     topic_percentages = []
@@ -49,7 +49,7 @@ def format_topics_sentences(ldamodel, corpus, texts):
             if j == 0:  # => dominant topic
                 wp = ldamodel.show_topic(topic_num)
                 topic_keywords = ", ".join([word for word, prop in wp])
-                sent_topics_df = sent_topics_df.append(pd.Series([int(topic_num), round(prop_topic,4), topic_keywords]), ignore_index=True)
+                sent_topics_df = pd.concat([sent_topics_df, pd.DataFrame([[int(topic_num), round(prop_topic, 4), topic_keywords]])], ignore_index=True)
             else:
                 break
     sent_topics_df.columns = ['Dominant_Topic', 'Perc_Contribution', 'Topic_Keywords']
@@ -64,7 +64,7 @@ def format_topics_sentences(ldamodel, corpus, texts):
 ########################################################################
 nzz_df = pd.read_csv('nzz_scrape.csv')
 spiegel_df = pd.read_csv('spiegel_scrape.csv')
-taz_df = pd.read_csv('spiegel_scrape.csv')
+taz_df = pd.read_csv('taz_scrape.csv')
 
 texts_nzz = list()
 texts_spiegel = list()
@@ -94,11 +94,11 @@ n_topics = 3
 ########################################################################
 dictionary_nzz = corpora.Dictionary(texts_nzz)
 corpus_nzz = [dictionary_nzz.doc2bow(text) for text in texts_nzz]
-ldamodel_nzz = gensim.models.ldamodel.LdaModel(corpus_nzz, num_topics=n_topics, id2word = dictionary_nzz, passes=100, minimum_probability=0.01, alpha='asymmetric', eta=0.01)
+ldamodel_nzz = gensim.models.ldamodel.LdaModel(corpus_nzz, num_topics=n_topics, id2word = dictionary_nzz, passes=100, minimum_probability=0.01, alpha='asymmetric', eta=0.01, random_state=0)
 ########################################################################
 dictionary_spiegel = corpora.Dictionary(texts_spiegel)
 corpus_spiegel = [dictionary_spiegel.doc2bow(text) for text in texts_spiegel]
-ldamodel_spiegel = gensim.models.ldamodel.LdaModel(corpus_spiegel, num_topics=n_topics, id2word = dictionary_spiegel, passes=100, minimum_probability=0, alpha='asymmetric')
+ldamodel_spiegel = gensim.models.ldamodel.LdaModel(corpus_spiegel, num_topics=n_topics, id2word = dictionary_spiegel, passes=100, minimum_probability=0, alpha='asymmetric', random_state=0)
 
 mdiff, annotation = ldamodel_nzz.diff(ldamodel_spiegel, distance='jaccard', num_words=50) # try Hellinger distance
 
@@ -119,7 +119,7 @@ df_dominant_topic = df_topic_sents_keywords.reset_index()
 df_dominant_topic.columns = ['Document_No', 'Dominant_Topic', 'Topic_Perc_Contrib', 'Keywords', 'Text']
 df_dominant_topic = df_dominant_topic.sort_values('Topic_Perc_Contrib', ascending=False)
 topic_1_nzz, topic_1_spiegel = [], []
-for i in range(50):
+for i in range(min(50, len(df_dominant_topic))):
 	if int(df_dominant_topic['Dominant_Topic'].values[i]) == i_min:
 		topic_1_nzz.append(nzz_df['Teaser'][df_dominant_topic['Document_No'].values[i]])
 # ~ df_dominant_topic.to_csv('test1.csv', index=False)
@@ -128,16 +128,13 @@ df_topic_sents_keywords = format_topics_sentences(ldamodel=ldamodel_spiegel, cor
 df_dominant_topic = df_topic_sents_keywords.reset_index()
 df_dominant_topic.columns = ['Document_No', 'Dominant_Topic', 'Topic_Perc_Contrib', 'Keywords', 'Text']
 df_dominant_topic = df_dominant_topic.sort_values('Topic_Perc_Contrib', ascending=False)
-for i in range(50):
+for i in range(min(50, len(df_dominant_topic))):
 	if int(df_dominant_topic['Dominant_Topic'].values[i]) == j_min:
 		topic_1_spiegel.append(spiegel_df['Teaser'][df_dominant_topic['Document_No'].values[i]])
 # ~ df_dominant_topic.to_csv('test2.csv', index=False)
 
-escapes = '\b\n\r\t\\'
-for i in range(3):
-	for c in escapes: 
-		topic_1_nzz[i] = topic_1_nzz[i].replace(c, '') 
-		topic_1_spiegel[i] = topic_1_spiegel[i].replace(c, '') 
+topic_1_nzz = [' '.join(headline.split()) for headline in topic_1_nzz]
+topic_1_spiegel = [' '.join(headline.split()) for headline in topic_1_spiegel]
 
 print("NZZ headlines:")
 print(topic_1_nzz[0:3])
@@ -153,7 +150,7 @@ top_n = 2
 
 ############################
 # (1) NZZ
-dominant_topics_nzz, topic_percentages_nzz = topics_per_document(model=ldamodel_nzz, corpus=corpus_nzz, end=-1)
+dominant_topics_nzz, topic_percentages_nzz = topics_per_document(model=ldamodel_nzz, corpus=corpus_nzz, end=None)
 df = pd.DataFrame(dominant_topics_nzz, columns=['Document_Id', 'Dominant_Topic'])
 dominant_topic_in_each_headline_nzz = df.groupby('Dominant_Topic').size()
 df_dominant_topic_in_each_headline_nzz = dominant_topic_in_each_headline_nzz.to_frame(name='count').reset_index()
@@ -171,7 +168,7 @@ df_top_n_words_nzz.reset_index(level=0,inplace=True)
 
 ############################
 # (2) Spiegel
-dominant_topics_spiegel, topic_percentages_spiegel = topics_per_document(model=ldamodel_spiegel, corpus=corpus_spiegel, end=-1)
+dominant_topics_spiegel, topic_percentages_spiegel = topics_per_document(model=ldamodel_spiegel, corpus=corpus_spiegel, end=None)
 df = pd.DataFrame(dominant_topics_spiegel, columns=['Document_Id', 'Dominant_Topic'])
 dominant_topic_in_each_headline_spiegel = df.groupby('Dominant_Topic').size()
 df_dominant_topic_in_each_headline_spiegel = dominant_topic_in_each_headline_spiegel.to_frame(name='count').reset_index()

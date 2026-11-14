@@ -1,0 +1,38 @@
+export const sources = [
+  {
+    id: 'nzz',
+    name: 'Neue Zürcher Zeitung',
+    short: 'NZZ',
+    country: 'Schweiz',
+    url: 'https://www.nzz.ch',
+    description: 'Schweizer Perspektiven im deutschsprachigen Vergleich.',
+    color: '#244e69',
+  },
+  {
+    id: 'spiegel',
+    name: 'DER SPIEGEL',
+    short: 'S',
+    country: 'Deutschland',
+    url: 'https://www.spiegel.de',
+    description: 'Schlagzeilen aus dem ursprünglichen Nachrichtenkorpus.',
+    color: '#b83b22',
+  },
+  {
+    id: 'taz',
+    name: 'die tageszeitung',
+    short: 'taz',
+    country: 'Deutschland',
+    url: 'https://taz.de',
+    description: 'Ein weiterer Blickwinkel im historischen Datensatz.',
+    color: '#62533c',
+  },
+  {
+    id: 'focus',
+    name: 'FOCUS Online',
+    short: 'F',
+    country: 'Deutschland',
+    url: 'https://www.focus.de',
+    description: 'Experimenteller Import mit erhöhtem Anteil an Navigation und Werbung.',
+    color: '#2f3f69',
+  },
+];

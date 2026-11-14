@@ -1,0 +1,27 @@
+name: Verify website and corpus
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+        working-directory: web
+      - run: npm test && npm run format:check && npm run build
+        working-directory: web
+      - run: python -m unittest discover -s tests -v
+      - run: python -m py_compile scrape.py clustering.py lda.py plot_frequencies.py scripts/*.py
+      - run: python scripts/export_archive.py && python scripts/seed_demo.py && python scripts/create_illustrations.py
+      - run: git diff --exit-code -- web/public/data web/public/images
